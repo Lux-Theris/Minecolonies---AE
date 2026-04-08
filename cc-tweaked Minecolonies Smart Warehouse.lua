@@ -24,12 +24,27 @@ local displayState = {}
 local recentLogs = {}
 local colonyOverview = {}
 
-local function addLog(msg)
+-- Função para limpar nomes de itens e tentar traduzir/formatar
+local function getCleanName(itemObj, fallbackName)
+    local name = fallbackName or (itemObj and itemObj.name) or "item"
+    if itemObj then
+        name = itemObj.displayName or itemObj.label or itemObj.name or name
+    end
+    
+    -- Se ainda for um ID técnico (contém : ou _), embeleza ele
+    if name:find(":") or name:find("_") then
+        name = name:gsub(".*:", ""):gsub("_", " ")
+        -- Primeira letra maiúscula em cada palavra
+        name = name:gsub("(%a)([%w_']*)", function(a, b) 
+            return string.upper(a) .. string.lower(b) 
+        end)
+    end
+    return name
+end
 
 local function addLog(msg)
     local time = os.date("%H:%M")
-    local shortMsg = msg:gsub("minecraft:", ""):gsub("minecolonies:", "")
-    table.insert(recentLogs, 1, "[" .. time .. "] " .. shortMsg) -- Adiciona no topo
+    table.insert(recentLogs, 1, "[" .. time .. "] " .. msg) -- Adiciona no topo
     if #recentLogs > 6 then table.remove(recentLogs) end -- Mantém os últimos 6
 end
 
@@ -173,6 +188,7 @@ local function findBuilderHuts()
     local huts = {}
 
     for _, building in ipairs(allBuildings) do
+        sleep(0) -- Previne erro 'Too long without yielding'
         -- Filtra apenas prédios do tipo 'builder'
         if building.type == "builder" then
             table.insert(huts, {
@@ -210,6 +226,7 @@ function logicLoop()
         print("\tWarehouse has", warehouseSize, "slots")
 
         for slot=1, warehouseSize do
+            sleep(0) -- Previne erro 'Too long without yielding'
             local invSlot = warehouse.getItemDetail(slot)
 
             if invSlot ~= nil then
@@ -234,6 +251,7 @@ function logicLoop()
     local warehouseInventory = {}
 
     for slot, item in pairs(warehouse.list()) do
+        sleep(0) -- Previne erro 'Too long without yielding'
         print('Warehouse has: x' .. item.count, item.name)
 
         warehouseInventory[item.name] = item.count
