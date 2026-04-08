@@ -30,42 +30,83 @@ local function updateMonitor()
     
     local w, h = monitor.getSize()
     
-    -- Cabeçalho Estilizado
+    -- Cabeçalho Principal
     monitor.setBackgroundColor(colors.gray)
     monitor.setTextColor(colors.white)
     monitor.setCursorPos(1, 1)
     monitor.clearLine()
-    local title = " SMART WAREHOUSE STATUS "
+    local title = " LOGISTICS DASHBOARD "
     monitor.setCursorPos(math.floor((w - #title)/2) + 1, 1)
     monitor.write(title)
     
-    -- Cabeçalho da Tabela
-    monitor.setBackgroundColor(colors.black)
-    monitor.setTextColor(colors.yellow)
-    monitor.setCursorPos(1, 2)
-    monitor.write(string.format("%-14s | %3s | %s", "Item", "Qt", "Status"))
-    monitor.setCursorPos(1, 3)
-    monitor.write(string.rep("-", w))
+    local activeItems = {}
+    local missingItems = {}
     
-    local line = 4
+    -- Separa os itens por categoria
     for name, data in pairs(displayState) do
-        if line > h then break end
-        monitor.setCursorPos(1, line)
-        
-        if data.status == "Crafting" then
-            monitor.setTextColor(colors.blue)
-        elseif data.status == "Missing" then
-            monitor.setTextColor(colors.red)
+        if data.status == "Missing" then
+            table.insert(missingItems, {name = name, count = data.count})
         else
-            monitor.setTextColor(colors.green)
+            table.insert(activeItems, {name = name, count = data.count, status = data.status})
         end
-        
-        local shortName = name:gsub("minecraft:", ""):gsub("minecolonies:", "")
-        shortName = string.sub(shortName, 1, 14)
-        
-        monitor.write(string.format("%-14s | %3d | %s", shortName, data.count, data.status))
-        line = line + 1
     end
+
+    local line = 2
+    
+    -- Seção de Ativos (OK / Crafting) – Só mostra se houver algo
+    if #activeItems > 0 then
+        monitor.setBackgroundColor(colors.black)
+        monitor.setTextColor(colors.yellow)
+        monitor.setCursorPos(1, line)
+        monitor.write("--- ATIVO / CRAFTING ---")
+        line = line + 1
+
+        for _, it in ipairs(activeItems) do
+            if line > h then break end
+            monitor.setCursorPos(1, line)
+            monitor.setTextColor(it.status == "Crafting" and colors.blue or colors.green)
+            
+            local shortName = it.name:gsub("minecraft:", ""):gsub("minecolonies:", "")
+            shortName = string.sub(shortName, 1, 14)
+            monitor.write(string.format("%-14s x%2d [%s]", shortName, it.count, it.status))
+            line = line + 1
+        end
+    end
+
+    -- Seção de Faltando (RED ALERT) – Separador visual
+    if #missingItems > 0 and line <= h then
+        line = line + 1
+        if line <= h then
+            monitor.setCursorPos(1, line)
+            monitor.setBackgroundColor(colors.red)
+            monitor.setTextColor(colors.white)
+            monitor.clearLine()
+            monitor.write(" !!! FALTANDO / ERRO !!! ")
+            monitor.setBackgroundColor(colors.black)
+            line = line + 1
+            
+            for _, it in ipairs(missingItems) do
+                if line > h then break end
+                monitor.setCursorPos(1, line)
+                monitor.setTextColor(colors.red)
+                local shortName = it.name:gsub("minecraft:", ""):gsub("minecolonies:", "")
+                monitor.write(string.format("- %-14s x%d", string.sub(shortName, 1, 14), it.count))
+                line = line + 1
+            end
+        end
+    end
+end
+
+-- Função auxiliar para verificar se algo está craftando (compatibilidade de versões)
+local function checkIsCrafting(item)
+    if bridge.isItemCrafting then
+        return bridge.isItemCrafting(item)
+    elseif bridge.isCrafting then
+        -- Tenta usar isCrafting como fallback
+        local success, result = pcall(bridge.isCrafting, item.name or item)
+        return success and result
+    end
+    return false
 end
 
 -- Função para encontrar cabanas de construtor automaticamente via API
@@ -157,7 +198,7 @@ function logicLoop()
                         -- Se não houver estoque suficiente, tenta craftar
                         if available < pullAmount then
                             local missing = pullAmount - available
-                            if not bridge.isItemCrafting({ ["name"] = hutNeed.item.name }) then
+                            if not checkIsCrafting({ ["name"] = hutNeed.item.name }) then
                                 print("\tME: Tentando craftar x" .. missing, hutNeed.item.name)
                                 local success = bridge.craftItem({ ["name"] = hutNeed.item.name, ["count"] = missing })
                                 if not success then
@@ -246,7 +287,7 @@ function logicLoop()
 
             if available < pullAmount then
                 local missing = pullAmount - available
-                if not bridge.isItemCrafting({ ["name"] = item.name }) then
+                if not checkIsCrafting({ ["name"] = item.name }) then
                     print("\tReq: Tentando craftar x" .. missing, item.name)
                     local success = bridge.craftItem({ ["name"] = item.name, ["count"] = missing })
                     if not success then
