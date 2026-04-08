@@ -2,8 +2,19 @@ local colony = peripheral.find("colony_integrator")
 local bridge = peripheral.find("me_bridge")
 local warehouse = peripheral.find("minecolonies:warehouse")
 
-local buffer = peripheral.find("minecraft:barrel")
-local bufferName = peripheral.getName(buffer)
+-- Tenta encontrar um barril ou baú para servir de buffer
+local buffer = peripheral.find("minecraft:barrel") or peripheral.find("minecraft:chest") or peripheral.find("minecraft:shulker_box")
+local bufferName = nil
+
+if buffer then
+    bufferName = peripheral.getName(buffer)
+else
+    term.setTextColour(colors.red)
+    print("ERRO: Nenhum 'Buffer' (Barril ou Bau) encontrado!")
+    print("Conecte um Barril ou Bau ao computador e reinicie.")
+    term.setTextColour(colors.white)
+    error("Falta periférico: Buffer")
+end
 
 local monitor = peripheral.find("monitor")
 local warehousCleanIn = 0
