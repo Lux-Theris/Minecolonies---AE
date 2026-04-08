@@ -48,6 +48,13 @@ local function addLog(msg)
     if #recentLogs > 6 then table.remove(recentLogs) end -- Mantém os últimos 6
 end
 
+-- Função para chamar comandos da colônia com segurança (evita crash se o comando não existir)
+local function colonySafe(method, ...)
+    if not colony[method] then return nil end
+    local success, result = pcall(colony[method], ...)
+    return success and result or nil
+end
+
 local function updateMonitor(timerValue)
     if not monitor then return end
     
@@ -205,12 +212,13 @@ end
 builderHuts = findBuilderHuts()
 
 function logicLoop()
-    -- Atualiza os dados da colônia
+    -- Atualiza os dados da colônia com segurança
     colonyOverview = {
-        name = colony.getColonyName(),
-        cits = colony.getAmountOfCitizens(),
-        maxcits = colony.getMaxAmountOfCitizens(),
-        happiness = colony.getHappiness()
+        name = colonySafe("getColonyName"),
+        level = colonySafe("getColonyLevel"),
+        cits = colonySafe("getAmountOfCitizens"),
+        maxcits = colonySafe("getMaxAmountOfCitizens"),
+        happiness = colonySafe("getHappiness")
     }
 
     displayState = {} -- Limpa os dados de status para o novo ciclo
