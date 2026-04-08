@@ -23,6 +23,7 @@ local warehousCleanIn = 0
 local displayState = {}
 local recentLogs = {}
 local colonyOverview = {}
+local currentAction = "Aguardando"
 
 -- Função para limpar nomes de itens e tentar traduzir/formatar
 local function getCleanName(itemObj, fallbackName)
@@ -68,16 +69,24 @@ local function updateMonitor(timerValue)
     monitor.setBackgroundColor(colors.blue)
     monitor.setTextColor(colors.white)
     monitor.clearLine()
-    local timerStr = timerValue and (timerValue .. "s") or "ACT"
-    local overviewLine = string.format(" %s | Cids:%d/%d | Next:%s", 
+    local timerStr = timerValue and (timerValue .. "s") or "[ACT]"
+    local overviewLine = string.format(" %s | Lvl:%d | Cits:%d/%d | %s", 
         colonyOverview.name or "Colonia", 
+        colonyOverview.level or 0,
         colonyOverview.cits or 0,
         colonyOverview.maxcits or 0,
         timerStr)
     monitor.write(string.sub(overviewLine, 1, w))
     
-    -- Sub-cabeçalho
+    -- Linha de Status de Ação
     monitor.setCursorPos(1, 2)
+    monitor.setBackgroundColor(colors.lightGray)
+    monitor.setTextColor(colors.black)
+    monitor.clearLine()
+    monitor.write(" AGORA: " .. string.upper(string.sub(currentAction, 1, w - 8)))
+
+    -- Sub-cabeçalho
+    monitor.setCursorPos(1, 3)
     monitor.setBackgroundColor(colors.gray)
     monitor.setTextColor(colors.white)
     monitor.clearLine()
@@ -95,7 +104,7 @@ local function updateMonitor(timerValue)
         end
     end
 
-    local line = 3
+    local line = 4
     monitor.setBackgroundColor(colors.black)
     
     -- Seção de Ativos (OK / Crafting) – Limpa as linhas conforme escreve
@@ -216,14 +225,17 @@ function logicLoop()
     colonyOverview = {
         name = colonySafe("getColonyName"),
         level = colonySafe("getColonyLevel"),
-        cits = colonySafe("getAmountOfCitizens"),
-        maxcits = colonySafe("getMaxAmountOfCitizens"),
+        cits = colonySafe("amountOfCitizens"),
+        maxcits = colonySafe("maxAmountOfCitizens"),
         happiness = colonySafe("getHappiness")
     }
 
     displayState = {} -- Limpa os dados de status para o novo ciclo
-    --Clean warehouse
+    
+    -- Clean warehouse
     if warehousCleanIn <= 0 then
+        currentAction = "Limpando Armazem"
+        updateMonitor()
         warehousCleanIn = 120
 
         print("Running warehouse clean")
@@ -253,6 +265,8 @@ function logicLoop()
     local chestFree = warehouse.size() - #warehouse.list()
     local chestUsed = 0
 
+    currentAction = "Indexando Itens"
+    updateMonitor()
     print('Indexing smart warehouse inventory')
 
     local warehouseInventory = {}
@@ -268,6 +282,8 @@ function logicLoop()
 
     -- BUILDER HUT ITEM GRABBING
     for hutNum, hut in pairs(builderHuts) do
+        currentAction = "Sondando: " .. hut.name
+        updateMonitor()
         local hutNeeds = colony.getBuilderResources(hut.position)
 
         print("Builder hut scan for", hut.name)
@@ -298,15 +314,18 @@ function logicLoop()
                                     local cleanerName = getCleanName(hutNeed.item)
                                     displayState[hutNeed.item.name] = {count = missing, status = "Missing", displayName = cleanerName}
                                     addLog("FALHA: " .. cleanerName)
+                                    updateMonitor()
                                 else
                                     local cleanerName = getCleanName(hutNeed.item)
                                     displayState[hutNeed.item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
                                     addLog("CRAFT: " .. missing .. "x " .. cleanerName)
+                                    updateMonitor()
                                 end
                             else
                                 local cleanerName = getCleanName(hutNeed.item)
                                 print("\tME: Crafting em progresso: " .. hutNeed.item.name)
                                 displayState[hutNeed.item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
+                                updateMonitor()
                             end
                         end
 
@@ -322,6 +341,7 @@ function logicLoop()
                             local cleanerName = getCleanName(hutNeed.item)
                             displayState[hutNeed.item.name] = displayState[hutNeed.item.name] or {count = toExtract, status = "OK", displayName = cleanerName}
                             addLog("OK: " .. toExtract .. "x " .. cleanerName)
+                            updateMonitor()
 
                             bridge.exportItem({ ["name"] = hutNeed.item.name, ["count"] = toExtract}, "right")
 
@@ -360,6 +380,8 @@ function logicLoop()
     end
 
     print()
+    currentAction = "Pedidos Cidadaos"
+    updateMonitor()
     print("Checking for citzen requests")
 
     -- CITIZEN REQUEST GRABBER
@@ -439,6 +461,7 @@ function logicLoop()
     term.setTextColour(colours.grey)
     print('System is sleeping for 60 seconds...')
     term.setTextColour(colours.white)
+    currentAction = "Aguardando"
     updateMonitor()
 end
 
