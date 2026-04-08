@@ -226,7 +226,7 @@ function logicLoop()
         name = colonySafe("getColonyName"),
         level = colonySafe("getColonyLevel"),
         cits = colonySafe("amountOfCitizens"),
-        maxcits = colonySafe("maxAmountOfCitizens"),
+        maxcits = colonySafe("maxOfCitizens"),
         happiness = colonySafe("getHappiness")
     }
 
