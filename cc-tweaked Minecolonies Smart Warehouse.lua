@@ -22,6 +22,9 @@ local warehousCleanIn = 0
 -- Tabela para armazenar o estado das solicitações para o monitor
 local displayState = {}
 local recentLogs = {}
+local colonyOverview = {}
+
+local function addLog(msg)
 
 local function addLog(msg)
     local time = os.date("%H:%M")
@@ -32,56 +35,73 @@ end
 
 local function updateMonitor()
     if not monitor then return end
-    monitor.setTextScale(0.5)
-    monitor.setBackgroundColor(colors.black)
-    monitor.clear()
     
     local w, h = monitor.getSize()
     
-    -- Cabeçalho Principal
+    -- Desenha em um buffer mental primeiro (evita tela preta)
+    monitor.setTextScale(0.5)
+    
+    -- Cabeçalho Principal com Overview da Colônia
+    monitor.setCursorPos(1, 1)
+    monitor.setBackgroundColor(colors.blue)
+    monitor.setTextColor(colors.white)
+    monitor.clearLine()
+    local overviewLine = string.format(" %s | Lvl: %d | Cids: %d/%d | Hap: %.1f", 
+        colonyOverview.name or "Colonia", 
+        colonyOverview.level or 0,
+        colonyOverview.cits or 0,
+        colonyOverview.maxcits or 0,
+        colonyOverview.happiness or 0 or 0)
+    monitor.write(string.sub(overviewLine, 1, w))
+    
+    -- Sub-cabeçalho
+    monitor.setCursorPos(1, 2)
     monitor.setBackgroundColor(colors.gray)
     monitor.setTextColor(colors.white)
-    monitor.setCursorPos(1, 1)
     monitor.clearLine()
-    local title = " LOGISTICS DASHBOARD "
-    monitor.setCursorPos(math.floor((w - #title)/2) + 1, 1)
-    monitor.write(title)
-    
+    monitor.write(" --- LOGISTICS DASHBOARD --- ")
+
     local activeItems = {}
     local missingItems = {}
     
     -- Separa os itens por categoria
     for name, data in pairs(displayState) do
         if data.status == "Missing" then
-            table.insert(missingItems, {name = name, count = data.count})
+            table.insert(missingItems, {name = name, displayName = data.displayName, count = data.count})
         else
-            table.insert(activeItems, {name = name, count = data.count, status = data.status})
+            table.insert(activeItems, {name = name, displayName = data.displayName, count = data.count, status = data.status})
         end
     end
 
-    local line = 2
+    local line = 3
+    monitor.setBackgroundColor(colors.black)
     
-    -- Seção de Ativos (OK / Crafting) – Só mostra se houver algo
+    -- Seção de Ativos (OK / Crafting) – Limpa as linhas conforme escreve
     if #activeItems > 0 then
-        monitor.setBackgroundColor(colors.black)
         monitor.setTextColor(colors.yellow)
         monitor.setCursorPos(1, line)
-        monitor.write("--- ATIVO / CRAFTING ---")
+        monitor.clearLine()
+        monitor.write("-- ATIVO / CRAFTING --")
         line = line + 1
 
         for _, it in ipairs(activeItems) do
             if line > h then break end
             monitor.setCursorPos(1, line)
+            monitor.clearLine()
             monitor.setTextColor(it.status == "Crafting" and colors.blue or colors.green)
             
-            local shortName = it.name:gsub("minecraft:", ""):gsub("minecolonies:", "")
-            shortName = string.sub(shortName, 1, 14)
-            monitor.write(string.format("%-14s x%2d [%s]", shortName, it.count, it.status))
+            local nameToDraw = string.sub(it.displayName or it.name, 1, 14)
+            monitor.write(string.format("%-14s x%2d [%s]", nameToDraw, it.count, it.status))
             line = line + 1
         end
+    else
+        -- Se não há nada ativo, limpa uma linha
+        monitor.setCursorPos(1, line)
+        monitor.clearLine()
+        line = line + 1
     end
 
-    -- Seção de Faltando (RED ALERT) – Separador visual
+    -- Seção de Faltando (RED ALERT)
     if #missingItems > 0 and line <= h then
         line = line + 1
         if line <= h then
@@ -89,16 +109,17 @@ local function updateMonitor()
             monitor.setBackgroundColor(colors.red)
             monitor.setTextColor(colors.white)
             monitor.clearLine()
-            monitor.write(" !!! FALTANDO / ERRO !!! ")
+            monitor.write(" !!! ACAO MANUAL REQ. !!! ")
             monitor.setBackgroundColor(colors.black)
             line = line + 1
             
             for _, it in ipairs(missingItems) do
                 if line > h then break end
                 monitor.setCursorPos(1, line)
+                monitor.clearLine()
                 monitor.setTextColor(colors.red)
-                local shortName = it.name:gsub("minecraft:", ""):gsub("minecolonies:", "")
-                monitor.write(string.format("- %-14s x%d", string.sub(shortName, 1, 14), it.count))
+                local nameToDraw = string.sub(it.displayName or it.name, 1, 14)
+                monitor.write(string.format("- %-14s x%d", nameToDraw, it.count))
                 line = line + 1
             end
         end
@@ -119,9 +140,17 @@ local function updateMonitor()
         for _, log in ipairs(recentLogs) do
             if line > h then break end
             monitor.setCursorPos(1, line)
+            monitor.clearLine()
             monitor.write(string.sub(log, 1, w))
             line = line + 1
         end
+    end
+
+    -- Limpa o resto do monitor se sobrar espaço
+    while line <= h do
+        monitor.setCursorPos(1, line)
+        monitor.clearLine()
+        line = line + 1
     end
 end
 
@@ -160,8 +189,16 @@ end
 builderHuts = findBuilderHuts()
 
 function logicLoop()
-    displayState = {} -- Limpa os dados para o novo ciclo
-    updateMonitor()
+    -- Atualiza os dados da colônia
+    colonyOverview = {
+        name = colony.getColonyName(),
+        level = colony.getColonyLevel(),
+        cits = colony.getAmountOfCitizens(),
+        maxcits = colony.getMaxAmountOfCitizens(),
+        happiness = colony.getHappiness()
+    }
+
+    displayState = {} -- Limpa os dados de status para o novo ciclo
     --Clean warehouse
     if warehousCleanIn <= 0 then
         warehousCleanIn = 120
@@ -233,15 +270,18 @@ function logicLoop()
                                     term.setTextColour(colours.red)
                                     print("\tME: Bloco " .. hutNeed.item.name .. " não foi possível craftar")
                                     term.setTextColour(colours.white)
-                                    displayState[hutNeed.item.name] = {count = missing, status = "Missing"}
-                                    addLog("FALHA: " .. missing .. "x " .. hutNeed.item.name)
+                                    local cleanerName = getCleanName(hutNeed.item)
+                                    displayState[hutNeed.item.name] = {count = missing, status = "Missing", displayName = cleanerName}
+                                    addLog("FALHA: " .. cleanerName)
                                 else
-                                    displayState[hutNeed.item.name] = {count = missing, status = "Crafting"}
-                                    addLog("CRAFT: " .. missing .. "x " .. hutNeed.item.name)
+                                    local cleanerName = getCleanName(hutNeed.item)
+                                    displayState[hutNeed.item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
+                                    addLog("CRAFT: " .. missing .. "x " .. cleanerName)
                                 end
                             else
+                                local cleanerName = getCleanName(hutNeed.item)
                                 print("\tME: Crafting em progresso: " .. hutNeed.item.name)
-                                displayState[hutNeed.item.name] = {count = missing, status = "Crafting"}
+                                displayState[hutNeed.item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
                             end
                         end
 
@@ -253,8 +293,10 @@ function logicLoop()
                             term.setTextColour(colours.blue)
                             print("\tPulling: x", toExtract, hutNeed.item.name)
                             term.setTextColour(colours.white)
-                            displayState[hutNeed.item.name] = displayState[hutNeed.item.name] or {count = toExtract, status = "OK"}
-                            addLog("OK: " .. toExtract .. "x " .. hutNeed.item.name)
+                            
+                            local cleanerName = getCleanName(hutNeed.item)
+                            displayState[hutNeed.item.name] = displayState[hutNeed.item.name] or {count = toExtract, status = "OK", displayName = cleanerName}
+                            addLog("OK: " .. toExtract .. "x " .. cleanerName)
 
                             bridge.exportItem({ ["name"] = hutNeed.item.name, ["count"] = toExtract}, "right")
 
@@ -325,14 +367,17 @@ function logicLoop()
                         term.setTextColour(colours.red)
                         print("\tReq: Bloco " .. item.name .. " não foi possível craftar")
                         term.setTextColour(colours.white)
-                        displayState[item.name] = {count = missing, status = "Missing"}
-                        addLog("FALHA: " .. item.name)
+                        local cleanerName = getCleanName(item)
+                        displayState[item.name] = {count = missing, status = "Missing", displayName = cleanerName}
+                        addLog("FALHA: " .. cleanerName)
                     else
-                        displayState[item.name] = {count = missing, status = "Crafting"}
-                        addLog("CRAFT: " .. missing .. "x " .. item.name)
+                        local cleanerName = getCleanName(item)
+                        displayState[item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
+                        addLog("CRAFT: " .. missing .. "x " .. cleanerName)
                     end
                 else
-                    displayState[item.name] = {count = missing, status = "Crafting"}
+                    local cleanerName = getCleanName(item)
+                    displayState[item.name] = {count = missing, status = "Crafting", displayName = cleanerName}
                 end
             end
 
@@ -343,8 +388,10 @@ function logicLoop()
                 term.setTextColour(colours.blue)
                 print("\tPulling: x" .. toExtract, item.name)
                 term.setTextColour(colours.white)
-                displayState[item.name] = displayState[item.name] or {count = toExtract, status = "OK"}
-                addLog("REQ OK: " .. item.name)
+                
+                local cleanerName = getCleanName(item)
+                displayState[item.name] = displayState[item.name] or {count = toExtract, status = "OK", displayName = cleanerName}
+                addLog("REQ OK: " .. cleanerName)
 
                 bridge.exportItem({ ["name"] = item.name, ["count"] = toExtract }, "right")
 
