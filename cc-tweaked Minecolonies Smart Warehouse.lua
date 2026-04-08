@@ -62,9 +62,8 @@ local function updateMonitor(timerValue)
     monitor.setTextColor(colors.white)
     monitor.clearLine()
     local timerStr = timerValue and (timerValue .. "s") or "ACT"
-    local overviewLine = string.format(" %s | Lvl:%d | Cids:%d/%d | Next:%s", 
+    local overviewLine = string.format(" %s | Cids:%d/%d | Next:%s", 
         colonyOverview.name or "Colonia", 
-        colonyOverview.level or 0,
         colonyOverview.cits or 0,
         colonyOverview.maxcits or 0,
         timerStr)
@@ -209,7 +208,6 @@ function logicLoop()
     -- Atualiza os dados da colônia
     colonyOverview = {
         name = colony.getColonyName(),
-        level = colony.getColonyLevel(),
         cits = colony.getAmountOfCitizens(),
         maxcits = colony.getMaxAmountOfCitizens(),
         happiness = colony.getHappiness()
