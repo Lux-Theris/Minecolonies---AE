@@ -21,6 +21,14 @@ local warehousCleanIn = 0
 
 -- Tabela para armazenar o estado das solicitações para o monitor
 local displayState = {}
+local recentLogs = {}
+
+local function addLog(msg)
+    local time = os.date("%H:%M")
+    local shortMsg = msg:gsub("minecraft:", ""):gsub("minecolonies:", "")
+    table.insert(recentLogs, 1, "[" .. time .. "] " .. shortMsg) -- Adiciona no topo
+    if #recentLogs > 6 then table.remove(recentLogs) end -- Mantém os últimos 6
+end
 
 local function updateMonitor()
     if not monitor then return end
@@ -93,6 +101,26 @@ local function updateMonitor()
                 monitor.write(string.format("- %-14s x%d", string.sub(shortName, 1, 14), it.count))
                 line = line + 1
             end
+        end
+    end
+
+    -- Seção de Histórico Recente (Log)
+    if line <= h - 1 then
+        line = line + 1
+        monitor.setCursorPos(1, line)
+        monitor.setBackgroundColor(colors.gray)
+        monitor.setTextColor(colors.white)
+        monitor.clearLine()
+        monitor.write(" --- HISTORICO RECENTE --- ")
+        monitor.setBackgroundColor(colors.black)
+        line = line + 1
+        
+        monitor.setTextColor(colors.lightGray)
+        for _, log in ipairs(recentLogs) do
+            if line > h then break end
+            monitor.setCursorPos(1, line)
+            monitor.write(string.sub(log, 1, w))
+            line = line + 1
         end
     end
 end
@@ -206,8 +234,10 @@ function logicLoop()
                                     print("\tME: Bloco " .. hutNeed.item.name .. " não foi possível craftar")
                                     term.setTextColour(colours.white)
                                     displayState[hutNeed.item.name] = {count = missing, status = "Missing"}
+                                    addLog("FALHA: " .. missing .. "x " .. hutNeed.item.name)
                                 else
                                     displayState[hutNeed.item.name] = {count = missing, status = "Crafting"}
+                                    addLog("CRAFT: " .. missing .. "x " .. hutNeed.item.name)
                                 end
                             else
                                 print("\tME: Crafting em progresso: " .. hutNeed.item.name)
@@ -224,6 +254,7 @@ function logicLoop()
                             print("\tPulling: x", toExtract, hutNeed.item.name)
                             term.setTextColour(colours.white)
                             displayState[hutNeed.item.name] = displayState[hutNeed.item.name] or {count = toExtract, status = "OK"}
+                            addLog("OK: " .. toExtract .. "x " .. hutNeed.item.name)
 
                             bridge.exportItem({ ["name"] = hutNeed.item.name, ["count"] = toExtract}, "right")
 
@@ -295,8 +326,10 @@ function logicLoop()
                         print("\tReq: Bloco " .. item.name .. " não foi possível craftar")
                         term.setTextColour(colours.white)
                         displayState[item.name] = {count = missing, status = "Missing"}
+                        addLog("FALHA: " .. item.name)
                     else
                         displayState[item.name] = {count = missing, status = "Crafting"}
+                        addLog("CRAFT: " .. missing .. "x " .. item.name)
                     end
                 else
                     displayState[item.name] = {count = missing, status = "Crafting"}
@@ -311,6 +344,7 @@ function logicLoop()
                 print("\tPulling: x" .. toExtract, item.name)
                 term.setTextColour(colours.white)
                 displayState[item.name] = displayState[item.name] or {count = toExtract, status = "OK"}
+                addLog("REQ OK: " .. item.name)
 
                 bridge.exportItem({ ["name"] = item.name, ["count"] = toExtract }, "right")
 
