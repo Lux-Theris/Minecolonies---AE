@@ -48,7 +48,7 @@ local function addLog(msg)
     if #recentLogs > 6 then table.remove(recentLogs) end -- Mantém os últimos 6
 end
 
-local function updateMonitor()
+local function updateMonitor(timerValue)
     if not monitor then return end
     
     local w, h = monitor.getSize()
@@ -61,12 +61,13 @@ local function updateMonitor()
     monitor.setBackgroundColor(colors.blue)
     monitor.setTextColor(colors.white)
     monitor.clearLine()
-    local overviewLine = string.format(" %s | Lvl: %d | Cids: %d/%d | Hap: %.1f", 
+    local timerStr = timerValue and (timerValue .. "s") or "ACT"
+    local overviewLine = string.format(" %s | Lvl:%d | Cids:%d/%d | Next:%s", 
         colonyOverview.name or "Colonia", 
         colonyOverview.level or 0,
         colonyOverview.cits or 0,
         colonyOverview.maxcits or 0,
-        colonyOverview.happiness or 0 or 0)
+        timerStr)
     monitor.write(string.sub(overviewLine, 1, w))
     
     -- Sub-cabeçalho
@@ -426,21 +427,25 @@ function logicLoop()
             print("\tReq: No item", req.name)
             term.setTextColour(colours.white)
         end
-
         sleep(1)
     end
 
     term.setTextColour(colours.grey)
     print('System is sleeping for 60 seconds...')
     term.setTextColour(colours.white)
+    updateMonitor()
 end
 
 while true do
-    local success, error = pcall(logicLoop)
+    local success, err = pcall(logicLoop)
 
-    if error then
-        print(error)
+    if err then
+        print(err)
     end
 
-    sleep(60)
+    -- Timer regressivo no monitor durante a espera
+    for i = 60, 1, -1 do
+        updateMonitor(i)
+        sleep(1)
+    end
 end
